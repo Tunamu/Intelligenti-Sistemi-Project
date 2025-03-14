@@ -2,7 +2,9 @@ import numpy as np
 import cv2 as cv
 from PIL import Image
 
-import pytesseract as pyt
+import pytesseract
+
+pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 
 
 #ball = image[10:100, 10:100]
@@ -26,8 +28,9 @@ image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
 
 # OpenCV görüntüsünü PIL formatına çevirerek Tesseract’a gönder
 pil_image = Image.fromarray(image)
-text = pyt.image_to_string(image)
-cv.imshow('goruntu',text)
+text = pytesseract.image_to_boxes(image)
+cv.imshow('image',image)
+print(text)
 
 # Kullanıcının bir tuşa basmasını bekle
 cv.waitKey(0)
