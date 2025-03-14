@@ -2,11 +2,38 @@ import numpy as np
 import cv2 as cv
 from PIL import Image
 
-import pytesseract
+import pytesseract as pyt
 
-image = cv.imread('./data/IMG_5239.jpg')
-assert image is not None ,"file could not be read, check with os.path.exists()"
-ball = image[280:340, 330:390]
-print(ball)
-print(pytesseract.image_to_string(Image.open('./dataIMG_5239.jpg')))
+
+#ball = image[10:100, 10:100]
+#print(ball)
+
+
+# Tesseract ile OCR çalıştır
+#text = pytesseract.image_to_string(img)
+#print(text)
+
+
+image_path = './data/IMG_5239.jpg'
+
+# OpenCV ile oku
+image = cv.imread(image_path)
+assert image is not None, "Dosya okunamadı!"
+
+# OpenCV -> RGB formatına çevir
+image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+
+
+# OpenCV görüntüsünü PIL formatına çevirerek Tesseract’a gönder
+pil_image = Image.fromarray(image)
+text = pyt.image_to_string(image)
+cv.imshow('goruntu',text)
+
+# Kullanıcının bir tuşa basmasını bekle
+cv.waitKey(0)
+
+# Tüm OpenCV pencerelerini kapat
+cv.destroyAllWindows()
+
+
 #My Datalist : IMG_5239.jpg - IMG_5254.jpg
