@@ -8,7 +8,7 @@ pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 output_folder = "CharacterRepo"
 os.makedirs(output_folder, exist_ok=True)
 
-image_path = "./data/IMG_5254.jpg"
+image_path = "./data/bigCharacter.png"
 
 if not os.path.exists(image_path):
     raise FileNotFoundError(f"Görsel dosyası bulunamadı: {image_path}")
@@ -49,6 +49,10 @@ for x, y, w, h in sorted(boxes, key=lambda b: (b[0], b[1])):  # Sütun bazlı s�
     roi = cv2.resize(roi, (cell_width, cell_height))
 
     char = pytesseract.image_to_boxes(roi, config='--psm 10').strip()
+
+    #TODO
+    #if not char or not char.isalnum():
+    #    continue
 
     char_filename = f"{output_folder}/char_{char_index}.png"
 
