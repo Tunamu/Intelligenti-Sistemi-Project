@@ -1,76 +1,62 @@
-import numpy as np 
-import cv2 as cv
-from PIL import Image
-
+import cv2
+import numpy as np
 import pytesseract
+import os
 
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 
-from matplotlib import pyplot as plt
+output_folder = "CharacterRepo"
+os.makedirs(output_folder, exist_ok=True)
 
-img = cv.imread('./data/IMG_5239.jpg', cv.IMREAD_GRAYSCALE)  # `<opencv_root>/samples/data/blox.jpg`
+image_path = "./data/IMG_5254.jpg"
 
-# Initiate FAST object with default values
-fast = cv.FastFeatureDetector_create()
+if not os.path.exists(image_path):
+    raise FileNotFoundError(f"Görsel dosyası bulunamadı: {image_path}")
 
-kernel = np.ones((5,5),np.uint8)
-opening = cv.morphologyEx(img, cv.MORPH_OPEN, kernel)
-# find and draw the keypoints
-kp = fast.detect(img, None)
-img2 = cv.drawKeypoints(opening, kp, None, color=(255, 0, 0))
+image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
-# Print all default params
-print("Threshold: {}".format(fast.getThreshold()))
-print("nonmaxSuppression:{}".format(fast.getNonmaxSuppression()))
-print("neighborhood: {}".format(fast.getType()))
-print("Total Keypoints with nonmaxSuppression: {}".format(len(kp)))
+if image is None:
+    raise FileNotFoundError(f"Görsel yüklenemedi. Dosya yolu yanlış veya dosya bozuk: {image_path}")
 
-cv.imshow('fast_true.png', img2)
+_, thresh = cv2.threshold(image, 110, 255, cv2.THRESH_BINARY_INV)
 
-# Disable nonmaxSuppression
-fast.setNonmaxSuppression(0)
-kp = fast.detect(img, None)
-
-print("Total Keypoints without nonmaxSuppression: {}".format(len(kp)))
-
-img3 = cv.drawKeypoints(img, kp, None, color=(255, 0, 0))
-
-cv.imshow('fast_false.png', img3)
+contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
 
-#ball = image[10:100, 10:100]
-#print(ball)
+image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+cv2.drawContours(image_color, contours, -1, (0, 255, 0), 2)
 
+cv2.imshow("Image", image)
+cv2.imshow("Thresh", thresh)
+cv2.imshow("Contours", image_color)
 
-# Tesseract ile OCR çalıştır
-#text = pytesseract.image_to_string(img)
-#print(text)
+boxes = [cv2.boundingRect(c) for c in contours]
+boxes = sorted(boxes, key=lambda x: (x[1], x[0]))  # Satır ve sütun bazlı sıralama
 
+#for (x, y, w, h) in boxes:
+#    cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-image_path = './data/IMG_5239.jpg'
+cv2.imshow("Image", image)
 
-# OpenCV ile oku
-image = cv.imread(image_path)
-assert image is not None, "Dosya okunamadı!"
+cell_width = int(np.mean([w for x, y, w, h in boxes]))
+cell_height = int(np.mean([h for x, y, w, h in boxes]))
+print(cell_width, cell_height)
 
-# OpenCV -> RGB formatına çevir
-image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+char_index = 1
 
+for x, y, w, h in sorted(boxes, key=lambda b: (b[0], b[1])):  # Sütun bazlı sıralama
+    roi = image[y:y + h, x:x + w]
+    roi = cv2.resize(roi, (cell_width, cell_height))
 
-# OpenCV görüntüsünü PIL formatına çevirerek Tesseract’a gönder
-pil_image = Image.fromarray(image)
-ball = image[100:150, 100:150]
-#text = pytesseract.image_to_boxes(image)
-cv.imshow('image',ball)
-#print(text)
+    char = pytesseract.image_to_boxes(roi, config='--psm 10').strip()
 
+    char_filename = f"{output_folder}/char_{char_index}.png"
 
+    cv2.imwrite(char_filename, roi)
 
-# Kullanıcının bir tuşa basmasını bekle
-cv.waitKey(0)
+    print(f"Karakter '{char}' kaydedildi: {char_filename}")
 
-# Tüm OpenCV pencerelerini kapat
-cv.destroyAllWindows()
+    char_index += 1
 
-
-#My Datalist : IMG_5239.jpg - IMG_5254.jpg
+cv2.waitKey(0)
+cv2.destroyAllWindows()
