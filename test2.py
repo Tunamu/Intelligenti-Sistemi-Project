@@ -8,7 +8,7 @@ pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 output_folder = "CharacterRepo"
 os.makedirs(output_folder, exist_ok=True)
 
-image_path = "./data/littleCharacter.png.jpg"
+image_path = "./data/bigCharacterpng"
 
 if not os.path.exists(image_path):
     raise FileNotFoundError(f"Görsel dosyası bulunamadı: {image_path}")
@@ -29,10 +29,6 @@ cv2.drawContours(image_color, contours, -1, (0, 255, 0), 2)
 cv2.imshow("Thresh", otsu_thresh)
 cv2.imshow("Characters Only", image)
 cv2.imshow("Contours", image_color)
-
-# Bounding box'ları sırala (Önce satır bazlı, sonra sütun bazlı)
-boxes = [cv2.boundingRect(c) for c in contours]
-boxes = sorted(boxes, key=lambda x: (x[1], x[0]))  # Önce satır bazlı, sonra sütun bazlı sıralama
 
 # Bounding box'ları sırala (Önce satır bazlı, sonra sütun bazlı)
 boxes = [cv2.boundingRect(c) for c in contours]
