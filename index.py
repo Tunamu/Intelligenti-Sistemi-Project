@@ -18,10 +18,9 @@ image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 if image is None:
     raise FileNotFoundError(f"Görsel yüklenemedi. Dosya yolu yanlış veya dosya bozuk: {image_path}")
 
-_, thresh = cv2.threshold(image, 110, 255, cv2.THRESH_BINARY_INV)
+_, thresh = cv2.threshold(image, 120, 255, cv2.THRESH_BINARY_INV)
 
 contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
 
 image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 cv2.drawContours(image_color, contours, -1, (0, 255, 0), 2)
@@ -48,14 +47,15 @@ for x, y, w, h in sorted(boxes, key=lambda b: (b[0], b[1])):  # Sütun bazlı s�
     roi = image[y:y + h, x:x + w]
     roi = cv2.resize(roi, (cell_width, cell_height))
 
-    char = pytesseract.image_to_boxes(roi, config='--psm 10').strip()
+    # OCR kullanarak karakteri oku
+    char = pytesseract.image_to_string(roi, config='--psm 10').strip()
 
-    #TODO
-    #if not char or not char.isalnum():
-    #    continue
+    # Eğer karakter boşsa veya alfanumerik değilse kaydetme
+    if not char or not char.isalnum():
+        print(f"Atlandı: ({x}, {y}, {w}, {h}) -> '{char}'")
+        continue
 
     char_filename = f"{output_folder}/char_{char_index}.png"
-
     cv2.imwrite(char_filename, roi)
 
     print(f"Karakter '{char}' kaydedildi: {char_filename}")
