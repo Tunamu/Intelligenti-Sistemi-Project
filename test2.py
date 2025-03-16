@@ -34,25 +34,6 @@ cv2.imshow("Contours", image_color)
 boxes = [cv2.boundingRect(c) for c in contours]
 boxes = sorted(boxes, key=lambda x: (x[1], x[0]))  # Önce satır bazlı, sonra sütun bazlı sıralama
 
-char_index = 1
-
-for x, y, w, h in boxes:
-    roi = image[y:y + h, x:x + w]
-
-    # OCR kullanarak karakteri oku
-    char = pytesseract.image_to_string(roi, config='--psm 10').strip()
-
-    # Eğer karakter boşsa veya alfanumerik değilse kaydetme
-    if not char or not char.isalnum():
-        print(f"Atlandı: ({x}, {y}, {w}, {h}) -> '{char}'")
-        continue
-
-    char_filename = f"{output_folder}/char_{char_index}.png"
-    cv2.imwrite(char_filename, roi)
-
-    print(f"Karakter '{char}' kaydedildi: {char_filename}")
-
-    char_index += 1
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
