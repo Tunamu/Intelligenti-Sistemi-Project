@@ -1,58 +1,64 @@
 import cv2
-import numpy as np
 import pytesseract
 import os
 
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 
-output_folder = "CharacterRepo"
+output_folder = "CharacterRepository"
 os.makedirs(output_folder, exist_ok=True)
 
 image_path = "./data/bigCharacterpng"
 
+# We look any errors because of the image path
 if not os.path.exists(image_path):
-    raise FileNotFoundError(f"Görsel dosyası bulunamadı: {image_path}")
+    raise FileNotFoundError(f"Image path could not find!: {image_path}")
 
-image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE) #Open the image with black and white format(GRAYSCALE)
 
+# We look that can we open the image
 if image is None:
-    raise FileNotFoundError(f"Görsel yüklenemedi. Dosya yolu yanlış veya dosya bozuk: {image_path}")
+    raise FileNotFoundError(f"Image does not loaded!: {image_path}")
 
-# Görüntüyü ters çevir (Beyaz karakterler - Siyah arka plan)
+# I use otsu tresh method to optimise the rendering process
 _, otsu_thresh = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
+# We find lines inside of the image to detect box and we use tree method to detect all the boxes
 contours, _ = cv2.findContours(otsu_thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
 image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-cv2.drawContours(image_color, contours, -1, (0, 255, 0), 2)
+# For observing the lines we draw in image
+cv2.drawContours(image_color, contours, -1, (0, 255, 0) , 2)
 
+# Draw all the box finding process
 cv2.imshow("Thresh", otsu_thresh)
-cv2.imshow("Characters Only", image)
+cv2.imshow("Image", image)
 cv2.imshow("Contours", image_color)
 
-# Bounding box'ları sırala (Önce satır bazlı, sonra sütun bazlı)
+#Creating boxes in the order of rows
 boxes = [cv2.boundingRect(c) for c in contours]
-boxes = sorted(boxes, key=lambda x: (x[1], x[0]))  # Önce satır bazlı, sonra sütun bazlı sıralama
+boxes = sorted(boxes, key=lambda x: (x[1], x[0])) #Fırst based on row then column
 
-char_index = 1
+char_index = 1 #For every boxes we add 1 for name that boxes
 
 for x, y, w, h in boxes:
     roi = image[y:y + h, x:x + w]
 
-    # OCR kullanarak karakteri oku
+    # Read character using OCR
     char = pytesseract.image_to_string(roi, config='--psm 10').strip()
 
-    # Eğer karakter boşsa veya alfanumerik değilse kaydetme
+    # If the scan of the box is empty or unusable
     if not char or not char.isalnum():
-        print(f"Atlandı: ({x}, {y}, {w}, {h}) -> '{char}'")
+        print(f"Passed: ({x}, {y}, {w}, {h}) -> '{char}'")
         continue
 
+    # Save as unique name into that file path
     char_filename = f"{output_folder}/char_{char_index}.png"
     cv2.imwrite(char_filename, roi)
 
-    print(f"Karakter '{char}' kaydedildi: {char_filename}")
+    print(f"Character '{char}' saved: {char_filename}")
 
     char_index += 1
 
+# For closing the windows
 cv2.waitKey(0)
 cv2.destroyAllWindows()
