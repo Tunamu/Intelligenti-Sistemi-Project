@@ -4,10 +4,10 @@ import os
 
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 
-output_folder = "CharacterRepository"
+output_folder = "LittleCharacterRepository"
 os.makedirs(output_folder, exist_ok=True)
 
-image_path = "./data/bigCharacterpng"
+image_path = "./data/littleCharacter.png"
 
 # We look any errors because of the image path
 if not os.path.exists(image_path):
@@ -33,6 +33,7 @@ cv2.drawContours(image_color, contours, -1, (0, 255, 0) , 2)
 cv2.imshow("Thresh", otsu_thresh)
 cv2.imshow("Image", image)
 cv2.imshow("Contours", image_color)
+
 
 #Creating boxes in the order of rows
 boxes = [cv2.boundingRect(c) for c in contours]
