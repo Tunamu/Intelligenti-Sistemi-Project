@@ -1,76 +1,91 @@
-import numpy as np 
-import cv2 as cv
-from PIL import Image
-
+import cv2
 import pytesseract
+import os
+import numpy as np
+import pandas as pd
 
-pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
+# Geçerli harfler
+valid_letters = "ABCDEFGHIJKLMNOPRSTUVXYZ"
 
-from matplotlib import pyplot as plt
+# Tesseract path (Windows kullanıyorsan burayı kendi kurulumuna göre ayarla)
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-img = cv.imread('./data/IMG_5254.jpg', cv.IMREAD_GRAYSCALE)  # `<opencv_root>/samples/data/blox.jpg`
+# Resimlerin bulunduğu klasör
+image_folder = "bigCharacters"
+output_csv = "pixel_counts.csv"
 
-# Initiate FAST object with default values
-fast = cv.FastFeatureDetector_create()
+# Satır sayısını kullanıcıdan al
+u = int(input("Kaç satıra bölmek istiyorsunuz? "))
 
-kernel = np.ones((5,5),np.uint8)
-opening = cv.morphologyEx(img, cv.MORPH_OPEN, kernel)
-# find and draw the keypoints
-kp = fast.detect(img, None)
-img2 = cv.drawKeypoints(opening, kp, None, color=(255, 0, 0))
+# Kaç sütuna böleceğimiz belli: 3
+cols = 3
 
-# Print all default params
-print("Threshold: {}".format(fast.getThreshold()))
-print("nonmaxSuppression:{}".format(fast.getNonmaxSuppression()))
-print("neighborhood: {}".format(fast.getType()))
-print("Total Keypoints with nonmaxSuppression: {}".format(len(kp)))
+# Sonuçları saklamak için liste
+results = []
+column_names = ["Image", "Letter"]  # İlk iki sütun: Görüntü adı ve harf
 
-cv.imshow('fast_true.png', img2)
+# Dinamik olarak kolon isimleri oluştur
+for row in range(u):
+    for col in range(cols):
+        column_names.append(f"White_{row}_{col}")
+        column_names.append(f"Black_{row}_{col}")
 
-# Disable nonmaxSuppression
-fast.setNonmaxSuppression(0)
-kp = fast.detect(img, None)
+# Klasördeki tüm resimleri işle
+for image_name in os.listdir(image_folder):
+    image_path = os.path.join(image_folder, image_name)
 
-print("Total Keypoints without nonmaxSuppression: {}".format(len(kp)))
+    # Resmi yükle
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    if image is None:
+        print(f"Hata: {image_name} yüklenemedi!")
+        continue
 
-img3 = cv.drawKeypoints(img, kp, None, color=(255, 0, 0))
+    # 1. Dosya adından harfi al (ve geçerli mi kontrol et)
+    letter = image_name[0].upper() if image_name[0].isalpha() else None
+    if letter not in valid_letters:
+        letter = None  # Dosya adındaki harf geçerli değilse OCR kullan
 
-cv.imshow('fast_false.png', img3)
+    # 2. OCR ile harfi belirleme (Eğer dosya adında harf yoksa)
+    if not letter:
+        letter = pytesseract.image_to_string(
+            image, config="--psm 10 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPRSTUVXYZ"
+        ).strip()
 
+    # 3. Eğer harf geçerli değilse işlemi atla
+    if letter not in valid_letters:
+        print(f"Uyarı: {image_name} geçerli bir harf içermiyor, atlanıyor.")
+        continue
 
-#ball = image[10:100, 10:100]
-#print(ball)
+    # Resmin yüksekliği ve genişliği
+    h, w = image.shape
+    cell_h = h // u  # Her bir hücrenin yüksekliği
+    cell_w = w // cols  # Her bir hücrenin genişliği
 
+    # Görüntüyü binary hale getir (Siyah-beyaz ayrımı için)
+    _, binary_image = cv2.threshold(image, 128, 255, cv2.THRESH_BINARY)
 
-# Tesseract ile OCR çalıştır
-#text = pytesseract.image_to_string(img)
-#print(text)
+    # Tek satırda tüm bilgileri tutacak liste
+    row_data = [image_name, letter]
 
+    # Hücreleri işle ve tek satıra ekle
+    for row in range(u):
+        for col in range(cols):
+            # Bölgeyi al
+            cell = binary_image[row * cell_h:(row + 1) * cell_h, col * cell_w:(col + 1) * cell_w]
 
-image_path = './data/IMG_5239.jpg'
+            # Siyah ve beyaz piksel sayısını hesapla
+            white_pixels = np.count_nonzero(cell == 255)
+            black_pixels = np.count_nonzero(cell == 0)
 
-# OpenCV ile oku
-image = cv.imread(image_path)
-assert image is not None, "Dosya okunamadı!"
+            # Sonuçları listeye ekle (tek satır formatında)
+            row_data.append(white_pixels)
+            row_data.append(black_pixels)
 
-# OpenCV -> RGB formatına çevir
-image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+    # Sonuçlar listesine ekle
+    results.append(row_data)
 
+# CSV'ye yaz
+df = pd.DataFrame(results, columns=column_names)
+df.to_csv(output_csv, index=False)
 
-# OpenCV görüntüsünü PIL formatına çevirerek Tesseract’a gönder
-pil_image = Image.fromarray(image)
-ball = image[100:150, 100:150]
-#text = pytesseract.image_to_boxes(image)
-cv.imshow('image',ball)
-#print(text)
-
-
-
-# Kullanıcının bir tuşa basmasını bekle
-cv.waitKey(0)
-
-# Tüm OpenCV pencerelerini kapat
-cv.destroyAllWindows()
-
-
-#My Datalist : IMG_5239.jpg - IMG_5254.jpg
+print(f"İşlem tamamlandı! Sonuçlar {output_csv} dosyasına kaydedildi.")
