@@ -15,7 +15,7 @@ image_folder = "LittleCharacterRepository"
 output_csv = "little_pixel_counts.csv"
 
 # Input for row and column size
-u = int(input("Kaç satıra bölmek istiyorsunuz? "))
+u = int(input("Select how many rows and columns? "))
 
 # A list for keep all the result values
 results = []
