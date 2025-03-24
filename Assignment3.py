@@ -6,8 +6,8 @@ import pandas as pd
 
 pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 
-#abcdefghijklmnopqrstuvwxyz
-#ABCDEFGHIJKLMNOPQRSTUVWXYZ
+# Small valid letters: abcdefghijklmnopqrstuvwxyz
+# Big valid letters: ABCDEFGHIJKLMNOPQRSTUVWXYZ
 #For recognition only big letters
 valid_letters = "abcdefghijklmnopqrstuvwxyz"
 
