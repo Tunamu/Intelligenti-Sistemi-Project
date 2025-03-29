@@ -1,21 +1,35 @@
 import os
+import shutil
+import re
 
-# Klasör yolu
-image_folder = "LittleCharacterRepository"
+# Klasör yolları
+image_folder = "LittleCharacterRepositoryTest"
+destination_folder = "LittleCharacterRepositoryNew"
+
+# Eğer hedef klasör yoksa oluştur
+os.makedirs(destination_folder, exist_ok=True)
+
+i = 1  # Sayacı başlat
 
 # Klasördeki tüm dosyaları al
-for image_name in os.listdir(image_folder):
+for image_name in sorted(os.listdir(image_folder)):  # Dosyaları sıralı al
     old_path = os.path.join(image_folder, image_name)
 
-    # Eğer dosya zaten "Big" ile başlıyorsa atla
-    if image_name.startswith("little_"):
-        continue
+    # Dosya adını ve uzantısını al
+    name, ext = os.path.splitext(image_name)
 
-    # Yeni dosya adını oluştur
-    new_name = "little_" + image_name
-    new_path = os.path.join(image_folder, new_name)
+    # Sondaki sayıyı temizle (örneğin: "char_52" → "char")
+    temp_name = re.sub(r"_\d+$", "", name)
 
-    # Dosya adını değiştir
-    os.rename(old_path, new_path)
+    # Yeni dosya adını oluştur: "big_char_1.png" formatında
+    new_name = f"little_{temp_name}_{i}{ext}"
+    new_path = os.path.join(destination_folder, new_name)
 
-print("Tüm dosya adları güncellendi!")
+    # Dosyayı yeni klasöre KOPYALA
+    shutil.copy(old_path, new_path)
+
+    print(f"{image_name} → {new_name}")  # İşlem çıktısını göster
+
+    i += 1  # Sayaç artır
+
+print("✅ Tüm dosyalar başarıyla güncellendi ve kopyalandı!")
