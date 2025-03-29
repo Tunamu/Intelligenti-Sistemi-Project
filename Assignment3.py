@@ -9,10 +9,10 @@ pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 # Small valid letters: abcdefghijklmnopqrstuvwxyz
 # Big valid letters: ABCDEFGHIJKLMNOPQRSTUVWXYZ
 #For recognition only big letters
-valid_letters = "abcdefghijklmnopqrstuvwxyz"
+valid_letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-image_folder = "LittleCharacterRepository"
-output_csv = "little_pixel_counts.csv"
+image_folder = "BigCharacterRepositoryNew"
+output_csv = "big_pixel_counts_new.csv"
 
 # Input for row and column size
 u = int(input("Select how many rows and columns? "))
@@ -20,7 +20,7 @@ u = int(input("Select how many rows and columns? "))
 # A list for keep all the result values
 results = []
 # Column header names for csv file
-column_names = ["Image", "Letter"]
+column_names = ["Image", "Expected_Letter", "Ocp_Letter"]
 
 for row in range(u):
     for col in range(u):
@@ -46,22 +46,28 @@ for image_name in os.listdir(image_folder):
         continue
 
     # Looking for the letter in the image
-    letter = pytesseract.image_to_string(
-        image, config="--psm 10 -c tessedit_char_whitelist=abcdefghijklmnopqrstuvwxyz"
+    ocp_letter = pytesseract.image_to_string(
+        image, config="--psm 10 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     ).strip()
 
-    if letter not in valid_letters:
+    if ocp_letter not in valid_letters:
         print(f"Warning: {image_name} is nat a valid letter.")
-        letter = None
+        ocp_letter = None
+
 
     # Looking for width and height of the image
     h, w = image.shape
     cell_h = h // u
     cell_w = w // u
 
+    # This part for detecting the letter in png path
+    name, ext = os.path.splitext(image_name)
+    parts = name.split("_")
+    real_letter_name = parts[-1] if parts[-1] in valid_letters and parts[-1].isalpha() else None
+
     # For looking white and black pixels
     _, binary_image = cv2.threshold(image, 128, 255, cv2.THRESH_BINARY)
-    row_data = [image_name, letter]
+    row_data = [image_name, real_letter_name ,ocp_letter]
 
     total_white_pixels = 0
     total_black_pixels = 0
