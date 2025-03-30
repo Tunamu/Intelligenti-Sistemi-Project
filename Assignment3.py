@@ -9,10 +9,10 @@ pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 # Small valid letters: abcdefghijklmnopqrstuvwxyz
 # Big valid letters: ABCDEFGHIJKLMNOPQRSTUVWXYZ
 #For recognition only big letters
-valid_letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+valid_letters = "abcdefghijklmnopqrstuvwxyz"
 
-image_folder = "BigCharacterRepositoryNew"
-output_csv = "big_pixel_counts_new.csv"
+image_folder = "LittleCharacterRepositoryNew"
+output_csv = "little_pixel_counts_new.csv"
 
 # Input for row and column size
 u = int(input("Select how many rows and columns? "))
@@ -47,7 +47,7 @@ for image_name in os.listdir(image_folder):
 
     # Looking for the letter in the image
     ocp_letter = pytesseract.image_to_string(
-        image, config="--psm 10 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        image, config="--psm 10 -c tessedit_char_whitelist=abcdefghijklmnopqrstuvwxyz"
     ).strip()
 
     if ocp_letter not in valid_letters:
