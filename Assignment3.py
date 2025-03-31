@@ -12,7 +12,7 @@ pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 valid_letters = "abcdefghijklmnopqrstuvwxyz"
 
 image_folder = "LittleCharacterRepositoryNew"
-output_csv = "little_pixel_counts_new.csv"
+output_csv = "little_pixel_counts_new_10.csv"
 
 # Input for row and column size
 u = int(input("Select how many rows and columns? "))
@@ -85,9 +85,10 @@ for image_name in os.listdir(image_folder):
             # Total pixel of this region
             total_pixels = cell_h * cell_w
 
-            # Calculating the density of pixels
-            white_density = white_pixels / total_pixels
-            black_density = black_pixels / total_pixels
+            if total_pixels != 0:
+                # Calculating the density of pixels
+                white_density = white_pixels / total_pixels
+                black_density = black_pixels / total_pixels
 
             # Add the results in the list
             row_data.append(white_pixels)

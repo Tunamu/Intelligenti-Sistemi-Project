@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 # 📌 1️⃣ CSV Dosyanı Oku
-csv_path = ("big_pixel_counts_new.csv")
+csv_path = ("big_pixel_counts_new_5.csv")
 df = pd.read_csv(csv_path)
 
 # 📌 2️⃣ Giriş (X) ve Çıkış (y) Sütunlarını Ayır
