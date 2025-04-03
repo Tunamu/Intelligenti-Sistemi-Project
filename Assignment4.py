@@ -1,6 +1,7 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
+import numpy as np
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -8,25 +9,21 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import StandardScaler
 
 # CSV dosyasını oku
-file_path = "big_pixel_counts_new_5.csv"  # Eğer dosya başka bir dizindeyse yolu değiştir
+file_path = "big_pixel_counts_new_2.csv"
 df = pd.read_csv(file_path)
 
 # Gereksiz sütunları temizle
 df_cleaned = df.drop(columns=["Image", "Ocp_Letter"])  # Görüntü ismi ve OCR sonucu gereksiz
 
 # X (özellikler) ve y (etiketler) ayır
-X = df_cleaned.drop(columns=["Expected_Letter"])  # Tüm özellik sütunları
-y = df_cleaned["Expected_Letter"]  # Hedef değişken
+X = df_cleaned.drop(columns=["Expected_Letter"])
+y = df_cleaned["Expected_Letter"]
 
 # Harfleri sayısal değerlere çevir (Label Encoding)
 label_encoder = LabelEncoder()
-y_encoded = label_encoder.fit_transform(y)  # Harfleri 0,1,2,... gibi sayılara çeviriyoruz
-
-# Eğitim ve test setlerine ayır (%80 eğitim, %20 test)
-X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.1, random_state=42)
+y_encoded = label_encoder.fit_transform(y)
 
 # Kullanılacak modeller
 models = {
@@ -39,18 +36,36 @@ models = {
     "MLP Neural Network": MLPClassifier(max_iter=3000)
 }
 
-scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train)
-X_test = scaler.transform(X_test)
+# 10-fold çapraz doğrulama
+kf = KFold(n_splits=10, shuffle=True, random_state=42)
+results = []
 
-# Modelleri eğitip test edelim
-results = {}
-for name, model in models.items():
-    model.fit(X_train, y_train)  # Modeli eğit
-    y_pred = model.predict(X_test)  # Test verisiyle tahmin yap
-    acc = accuracy_score(y_test, y_pred)  # Doğruluk skorunu hesapla
-    results[name] = acc
-    print(f"{name}: {acc:.4f}")  # Sonuçları yazdır
+for fold, (train_idx, test_idx) in enumerate(kf.split(X)):
+    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+    y_train, y_test = y_encoded[train_idx], y_encoded[test_idx]
 
-# Sonuçları çıktı olarak göster
-print("Model Performansları:", results)
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    for model_name, model in models.items():
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        # Harf bazlı doğruluk hesapla
+        accuracy_per_letter = {}
+        for letter in np.unique(y_test):
+            letter_mask = y_test == letter
+            letter_accuracy = accuracy_score(y_test[letter_mask], y_pred[letter_mask])
+            accuracy_per_letter[label_encoder.inverse_transform([letter])[0]] = round(letter_accuracy, 2)
+
+        # Sonuçları sakla
+        result_entry = {"Fold": fold + 1, "Model": model_name}
+        result_entry.update(accuracy_per_letter)
+        results.append(result_entry)
+
+# Sonuçları CSV'ye kaydet
+results_df = pd.DataFrame(results)
+output_path = "letter_accuracy_results.csv"
+results_df.to_csv(output_path, index=False)
+print(f"Sonuçlar kaydedildi: {output_path}")
