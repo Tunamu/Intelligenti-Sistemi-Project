@@ -45,7 +45,7 @@ sklearn_models = {
     "MLP Neural Network": MLPClassifier(max_iter=3000)
 }
 
-# 📌 7️⃣ PyTorch Dataset Sınıfını Tanımla
+# 📌 7️⃣ PyTorch Dataset Sınıfı
 class CustomDataset(Dataset):
     def __init__(self, X, y):
         self.X = torch.tensor(X, dtype=torch.float32)
@@ -74,7 +74,8 @@ pytorch_models = {
     )
 }
 
-# 📌 9️⃣ PyTorch Model Eğitimi Fonksiyonu
+# 📌 9️⃣ PyTorch Model Eğitimi
+
 def train_model(model, train_loader, epochs=5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -90,7 +91,8 @@ def train_model(model, train_loader, epochs=5):
             loss.backward()
             optimizer.step()
 
-# 📌 🔟 PyTorch Model Değerlendirme Fonksiyonu
+# 🔟 PyTorch Model Testi
+
 def evaluate_model(model, test_loader):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -110,54 +112,90 @@ def evaluate_model(model, test_loader):
 
     return round((correct / total) * 100, 2), np.array(y_true), np.array(y_pred)
 
-# 📌 1️⃣1️⃣ 10-Fold Çapraz Doğrulama (Tüm Modeller İçin)
+# 📌 1️⃣1️⃣ Model Eğitim ve Test Döngüsü
 for fold, (train_idx, test_idx) in enumerate(kf.split(X)):
     X_train, X_test = X[train_idx], X[test_idx]
     y_train, y_test = y_encoded[train_idx], y_encoded[test_idx]
 
-    # 📌 1️⃣2️⃣ Scikit-Learn Modellerini Eğit ve Test Et
+    fold_results = []
+
+    # Scikit-learn modelleri
     for model_name, model in sklearn_models.items():
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
-        # Harf bazlı doğruluk hesapla
         accuracy_per_letter = {}
         for letter in np.unique(y_test):
             letter_mask = y_test == letter
-            letter_accuracy = accuracy_score(y_test[letter_mask], y_pred[letter_mask])
-            accuracy_per_letter[label_encoder.inverse_transform([letter])[0]] = round(letter_accuracy, 2)
+            acc = accuracy_score(y_test[letter_mask], y_pred[letter_mask])
+            accuracy_per_letter[label_encoder.inverse_transform([letter])[0]] = round(acc, 2)
 
-        # Sonuçları kaydet
         result_entry = {"Fold": fold + 1, "Model": model_name}
         result_entry.update(accuracy_per_letter)
-        results.append(result_entry)
+        fold_results.append(result_entry)
 
-    # 📌 1️⃣3️⃣ PyTorch Modellerini Eğit ve Test Et
-    train_dataset = CustomDataset(X_train, y_train)
-    test_dataset = CustomDataset(X_test, y_test)
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    # PyTorch modelleri
+    train_loader = DataLoader(CustomDataset(X_train, y_train), batch_size=32, shuffle=True)
+    test_loader = DataLoader(CustomDataset(X_test, y_test), batch_size=32, shuffle=False)
 
     for model_name, model in pytorch_models.items():
-        print(f"\n🚀 {model_name} - Fold {fold+1} Eğitiliyor...")
+        print(f"\n🚀 {model_name} - Fold {fold+1}")
         train_model(model, train_loader)
         acc, y_true, y_pred = evaluate_model(model, test_loader)
 
-        # PyTorch için harf bazlı doğruluk hesaplama
         accuracy_per_letter = {}
         for letter in np.unique(y_true):
             letter_mask = y_true == letter
-            letter_accuracy = accuracy_score(y_true[letter_mask], y_pred[letter_mask])
-            accuracy_per_letter[label_encoder.inverse_transform([letter])[0]] = round(letter_accuracy, 2)
+            acc = accuracy_score(y_true[letter_mask], y_pred[letter_mask])
+            accuracy_per_letter[label_encoder.inverse_transform([letter])[0]] = round(acc, 2)
 
-        # Sonuçları kaydet
         result_entry = {"Fold": fold + 1, "Model": model_name}
         result_entry.update(accuracy_per_letter)
-        results.append(result_entry)
+        fold_results.append(result_entry)
 
-# 📌 1️⃣4️⃣ Sonuçları CSV'ye Kaydet
+    # Fold ortalama satırı
+    fold_df = pd.DataFrame(fold_results)
+    letter_columns = [col for col in fold_df.columns if col not in ["Fold", "Model"]]
+    fold_avg_row = {"Fold": fold + 1, "Model": f"Fold_{fold+1}_Avg"}
+    for letter in letter_columns:
+        fold_avg_row[letter] = round(fold_df[letter].mean(), 2)
+    fold_avg_row["Fold_Model_Avg"] = round(fold_df[letter_columns].mean(axis=1).mean(), 2)
+
+    results.extend(fold_results)
+    results.append(fold_avg_row)
+
+# 📌 Sonuçları DataFrame'e Aktar
 results_df = pd.DataFrame(results)
-output_path = "combined_model_results.csv"
-results_df.to_csv(output_path, index=False)
+letter_columns = [col for col in results_df.columns if col not in ["Fold", "Model", "Fold_Model_Avg"]]
 
-print(f"\n📊 Sonuçlar kaydedildi: {output_path}")
+# Eksik Fold_Model_Avg hesapla
+if "Fold_Model_Avg" not in results_df.columns:
+    results_df["Fold_Model_Avg"] = results_df[letter_columns].mean(axis=1)
+else:
+    results_df["Fold_Model_Avg"] = results_df["Fold_Model_Avg"].fillna(results_df[letter_columns].mean(axis=1))
+
+# Model ortalamaları
+model_avg_df = results_df[~results_df["Model"].str.contains("Fold_") & ~results_df["Model"].isin(["Letter_Avg", "Overall_Avg"])]
+model_avg_df = model_avg_df.groupby("Model")[letter_columns + ["Fold_Model_Avg"]].mean().reset_index()
+model_avg_df.insert(0, "Fold", "")
+
+# Harf ortalamaları
+letter_avg_df = pd.DataFrame(results_df[letter_columns].mean()).T
+letter_avg_df.insert(0, "Model", "Letter_Avg")
+letter_avg_df.insert(0, "Fold", "")
+
+# Genel ortalama
+overall_avg = results_df[results_df["Model"] != "Overall_Avg"]["Fold_Model_Avg"].mean()
+overall_avg_df = pd.DataFrame([{
+    "Fold": "",
+    "Model": "Overall_Avg",
+    **{col: "" for col in letter_columns},
+    "Fold_Model_Avg": round(overall_avg, 2)
+}])
+
+# Hepsini birleştir
+final_df = pd.concat([results_df, model_avg_df, letter_avg_df, overall_avg_df], ignore_index=True)
+
+# CSV'ye yaz
+final_df.to_csv("simplified_model_results.csv", index=False)
+print("✅ Tüm fold ortalamaları dahil sonuçlar başarıyla kaydedildi!")
