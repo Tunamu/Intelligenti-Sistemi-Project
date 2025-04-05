@@ -15,7 +15,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
 
 # CSV Dosyasını Oku
-file_path = "big_pixel_counts_new_2.csv"
+file_path = "little_pixel_counts_new_10.csv"
 df = pd.read_csv(file_path)
 
 # Özellikleri (X) ve Etiketleri (y) Ayır
@@ -190,6 +190,6 @@ overall_avg_df = pd.DataFrame([{
 
 # Hepsini birleştir ve CSV'ye yaz
 final_df = pd.concat([results_df, model_avg_df, letter_avg_df, overall_avg_df], ignore_index=True)
-final_df.to_csv("simplified_model_results_new_2.csv", index=False, float_format="%.4f")
+final_df.to_csv("simplified_model_results_new_10.csv", index=False, float_format="%.4f")
 
 print("✅ Tüm sonuçlar 4 ondalıklı olarak ve model ortalamalarıyla kaydedildi!")
