@@ -1,206 +1,183 @@
-import numpy as np
 import pandas as pd
-import string
-import random
-from collections import deque
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.model_selection import KFold
+import random
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.metrics import accuracy_score
+import seaborn as sns
 
+# ====== Hyperparameters ======
+EPOCHS = 100
+BATCH_SIZE = 128
+GAMMA = 0.99
+EPSILON_START = 4.0
+EPSILON_END = 0.1
+EPSILON_DECAY = 0.65
+LR = 0.001
 
-# --- 1. Ortam (Environment) ---
-class LetterEnv:
-    def __init__(self, data):
-        self.df = data
-        self.features = self.df.drop(columns=["Image", "Expected_Letter", "Ocp_Letter", "CV_Prediction"]).values
-        self.labels = self.df["Expected_Letter"].values
-        self.letters = list(string.ascii_uppercase)
+# ====== Data Preparation ======
+df = pd.read_csv("../final_datasets/pixel_counts_with_cv_prediction_big_5.csv")
+df = df.drop(columns=["Image","Ocp_Letter"])
 
-        self.action_space = len(self.letters)
-        self.state_space = self.features.shape[1]
-        self.index = 0
+le_letters = LabelEncoder()
+df["Expected_Letter"] = le_letters.fit_transform(df["Expected_Letter"])
 
-    def reset(self):
-        self.index = 0
-        return self.features[self.index]
+le_rf = LabelEncoder()
+df["CV_Prediction"] = le_rf.fit_transform(df["CV_Prediction"])
 
-    def step(self, action):
-        predicted_letter = self.letters[action]
-        correct_letter = self.labels[self.index]
+X = df.drop(columns=["Expected_Letter"]).values.astype(np.float32)
+y = df["Expected_Letter"].values.astype(int)
+rf_out = df[("CV_Prediction")].values.astype(int)
 
-        reward = 1 if predicted_letter == correct_letter else -1
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
 
-        self.index += 1
-        done = self.index >= len(self.features)
-        next_state = None if done else self.features[self.index]
+X = torch.tensor(X)
+y = torch.tensor(y)
+rf_out = torch.tensor(rf_out)
 
-        return next_state, reward, done
+n_classes = len(np.unique(y))
 
-
-# --- 2. Sinir Ağı (Q-Network) ---
-class QNetwork(nn.Module):
+# ====== DQN Model Definition ======
+class ImprovedDQN(nn.Module):
     def __init__(self, input_dim, output_dim):
-        super(QNetwork, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 256)  # Daha büyük bir ağ yapısı
-        self.relu1 = nn.ReLU()
-        self.fc2 = nn.Linear(256, 128)
-        self.relu2 = nn.ReLU()
-        self.fc3 = nn.Linear(128, output_dim)
+        super(ImprovedDQN, self).__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 512),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, output_dim)
+        )
 
     def forward(self, x):
-        x = self.relu1(self.fc1(x))
-        x = self.relu2(self.fc2(x))
-        return self.fc3(x)
+        return self.net(x)
 
+# ====== Initialize Model, Target, Optimizer ======
+model = ImprovedDQN(X.shape[1], n_classes)
+target_model = ImprovedDQN(X.shape[1], n_classes)
+target_model.load_state_dict(model.state_dict())
+target_model.eval()
 
-# --- 3. Ajan (DQN Agent) ---
-class DQNAgent:
-    def __init__(self, state_dim, action_dim, lr=0.0001, gamma=0.99, epsilon=1.0, epsilon_decay=0.995,
-                 epsilon_min=0.01):
-        self.state_dim = state_dim
-        self.action_dim = action_dim
-        self.lr = lr
-        self.gamma = gamma
-        self.epsilon = epsilon
-        self.epsilon_decay = epsilon_decay
-        self.epsilon_min = epsilon_min
+optimizer = optim.Adam(model.parameters(), lr=LR)
+criterion = nn.MSELoss()
+epsilon = EPSILON_START
 
-        self.model = QNetwork(state_dim, action_dim)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
-        self.loss_fn = nn.MSELoss()
+# ====== History for Visualization ======
+history = {
+    'epoch': [],
+    'loss': [],
+    'reward': [],
+    'epsilon': []
+}
 
-        self.memory = deque(maxlen=10000)  # Daha büyük bir hafıza
-        self.batch_size = 64
+# ====== Training Loop ======
+for epoch in range(EPOCHS):
+    indices = torch.randperm(X.size(0))
+    total_loss = 0
+    total_reward = 0
 
-    def act(self, state):
-        if random.random() < self.epsilon:
-            return random.randint(0, self.action_dim - 1)
-        state = torch.FloatTensor(state).unsqueeze(0)
+    for i in range(0, X.size(0), BATCH_SIZE):
+        batch_idx = indices[i:i+BATCH_SIZE]
+        states = X[batch_idx]
+        labels = y[batch_idx]
+        rf_preds = rf_out[batch_idx]
+
+        q_values = model(states)
         with torch.no_grad():
-            q_values = self.model(state)
-        return torch.argmax(q_values).item()
+            next_q_values = target_model(states)
 
-    def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
+        targets = q_values.clone().detach()
 
-    def learn(self):
-        if len(self.memory) < self.batch_size:
-            return
-
-        batch = random.sample(self.memory, self.batch_size)
-        states, actions, rewards, next_states, dones = zip(*batch)
-
-        states = torch.FloatTensor(np.array(states))
-        actions = torch.LongTensor(actions).unsqueeze(1)
-        rewards = torch.FloatTensor(rewards).unsqueeze(1)
-        dones = torch.BoolTensor(dones)
-
-        # next_states içinde None varsa sıfırla
-        next_states_tensor = torch.zeros((self.batch_size, self.state_dim))
-        mask = torch.ones(self.batch_size, dtype=bool)
-        for i, ns in enumerate(next_states):
-            if ns is not None:
-                next_states_tensor[i] = torch.FloatTensor(ns)
+        for j in range(states.size(0)):
+            if random.random() < epsilon:
+                action = random.randint(0, n_classes - 1)
             else:
-                mask[i] = False
+                action = torch.argmax(q_values[j]).item()
 
-        q_values = self.model(states).gather(1, actions)
+            reward = 8 if action == labels[j].item() else (1 if action == rf_preds[j].item() else -5)
+            total_reward += reward
 
-        next_q_values = torch.zeros(self.batch_size, 1)
-        if mask.sum() > 0:
-            with torch.no_grad():
-                next_q = self.model(next_states_tensor)
-                next_q_values[mask] = next_q.max(dim=1)[0].unsqueeze(1)[mask]
+            max_next_q = torch.max(next_q_values[j]).item()
+            targets[j, action] = reward + GAMMA * max_next_q
 
-        target_q_values = rewards + (self.gamma * next_q_values)
-        loss = self.loss_fn(q_values, target_q_values)
-
-        self.optimizer.zero_grad()
+        loss = criterion(q_values, targets)
+        optimizer.zero_grad()
         loss.backward()
-        self.optimizer.step()
+        optimizer.step()
+        total_loss += loss.item()
 
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+    if epoch % 5 == 0:
+        target_model.load_state_dict(model.state_dict())
 
+    epsilon = max(EPSILON_END, epsilon * EPSILON_DECAY)
 
-# --- 4. Eğitim Döngüsü ---
-def train_dqn(data_path, k=10, episodes=50):  # Epizod sayısını artırdık
-    df = pd.read_csv(data_path)
-    kf = KFold(n_splits=k, shuffle=True, random_state=42)
+    print(f"Epoch {epoch+1}/{EPOCHS} - Loss: {total_loss:.4f} - Total Reward: {total_reward}")
 
-    # Eğitimdeki toplam ödülleri depolamak için bir liste
-    all_rewards = []
+    history['epoch'].append(epoch + 1)
+    history['loss'].append(total_loss)
+    history['reward'].append(total_reward)
+    history['epsilon'].append(epsilon)
 
-    # K-fold işlemi
-    for fold, (train_index, test_index) in enumerate(kf.split(df)):
-        print(f"Fold {fold + 1}/{k}")
-        train_data = df.iloc[train_index]
-        test_data = df.iloc[test_index]
+# ====== Evaluation ======
+model.eval()
+preds = []
+true_labels = []
 
-        env_train = LetterEnv(train_data)
-        env_test = LetterEnv(test_data)
+with torch.no_grad():
+    for i in range(X.size(0)):
+        q_vals = model(X[i])
+        pred = torch.argmax(q_vals).item()
+        preds.append(pred)
+        true_labels.append(y[i].item())
 
-        agent = DQNAgent(state_dim=env_train.state_space, action_dim=env_train.action_space)
+acc = accuracy_score(true_labels, preds)
+print(f"\nFinal Accuracy of Improved DQN Agent: {acc:.4f}")
 
-        # Eğitim kısmı
-        total_rewards = []  # Bu fold için ödüller
-        for episode in range(episodes):
-            state = env_train.reset()
-            total_reward = 0
-            done = False
+# ====== Letter-wise Accuracy ======
+letter_acc = {}
+true_labels = np.array(true_labels)
+preds = np.array(preds)
 
-            while not done:
-                action = agent.act(state)
-                next_state, reward, done = env_train.step(action)
-                agent.remember(state, action, reward, next_state, done)
-                agent.learn()
-                state = next_state
-                total_reward += reward
+for label in np.unique(true_labels):
+    mask = true_labels == label
+    correct = (preds[mask] == true_labels[mask]).sum()
+    letter_acc[le_letters.inverse_transform([label])[0]] = correct / mask.sum()
 
-            total_rewards.append(total_reward)
-            print(f"Episode {episode + 1}/{episodes} - Total Reward: {total_reward} - Epsilon: {agent.epsilon:.3f}")
+print("\nLetter-wise Accuracies:")
+for letter, acc in sorted(letter_acc.items()):
+    print(f"{letter}: {acc:.4f}")
 
-        all_rewards.append(total_rewards)
+# ====== Training Graphs ======
+plt.figure(figsize=(18, 5))
 
-        # Test kısmı
-        correct_predictions = {letter: 0 for letter in string.ascii_uppercase}
-        total_predictions = {letter: 0 for letter in string.ascii_uppercase}
+# Loss Graph
+plt.subplot(1, 3, 1)
+plt.plot(history['epoch'], history['loss'], label='Loss', color='blue')
+plt.title("Loss per Epoch")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.grid(True)
 
-        state = env_test.reset()
-        done = False
+# Reward Graph
+plt.subplot(1, 3, 2)
+plt.plot(history['epoch'], history['reward'], label='Reward', color='green')
+plt.title("Total Reward per Epoch")
+plt.xlabel("Epoch")
+plt.ylabel("Reward")
+plt.grid(True)
 
-        while not done:
-            action = agent.act(state)
-            next_state, reward, done = env_test.step(action)
-            predicted_letter = string.ascii_uppercase[action]
-            correct_letter = env_test.labels[env_test.index - 1]
+# Epsilon Graph
+plt.subplot(1, 3, 3)
+plt.plot(history['epoch'], history['epsilon'], label='Epsilon', color='red')
+plt.title("Epsilon Decay")
+plt.xlabel("Epoch")
+plt.ylabel("Epsilon")
+plt.grid(True)
 
-            if predicted_letter == correct_letter:
-                correct_predictions[predicted_letter] += 1
-            total_predictions[predicted_letter] += 1
-
-            state = next_state
-
-        # Her bir harf için doğruluk oranını yazdır
-        print("Test Sonuçları (Harf Başına Doğruluk Yüzdesi):")
-        for letter in string.ascii_uppercase:
-            if total_predictions[letter] > 0:
-                accuracy = correct_predictions[letter] / total_predictions[letter] * 100
-                print(f"{letter}: {accuracy:.2f}%")
-
-    # Grafikleştirme: Eğitimdeki toplam ödüller
-    plt.figure(figsize=(10, 6))
-    for fold_rewards in all_rewards:
-        plt.plot(fold_rewards, label="Episod Ödülü")
-    plt.title("DQN Eğitim Sonuçları (Toplam Ödüller)")
-    plt.xlabel("Epizod")
-    plt.ylabel("Toplam Ödül")
-    plt.legend()
-    plt.show()
-
-
-# --- 5. Scripti çalıştır ---
-if __name__ == "__main__":
-    train_dqn("../final_datasets/pixel_counts_with_cv_prediction_big_5.csv", k=10, episodes=10)  # Epizod sayısını artırdık
+plt.tight_layout()
+plt.show()
