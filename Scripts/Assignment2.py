@@ -7,7 +7,7 @@ pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 output_folder = "LittleCharacterRepository"
 os.makedirs(output_folder, exist_ok=True)
 
-image_path = "./data/littleCharacter.png"
+image_path = "../data/littleCharacter.png"
 
 # We look any errors because of the image path
 if not os.path.exists(image_path):

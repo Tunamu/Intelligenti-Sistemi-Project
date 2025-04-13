@@ -8,7 +8,7 @@ pytesseract.pytesseract.tesseract_cmd = "/opt/homebrew/bin/tesseract"
 output_folder = "CharacterRepo"
 os.makedirs(output_folder, exist_ok=True)
 
-image_path = "./data/bigCharacter.png"
+image_path = "../data/bigCharacter.png"
 
 if not os.path.exists(image_path):
     raise FileNotFoundError(f"Görsel dosyası bulunamadı: {image_path}")
