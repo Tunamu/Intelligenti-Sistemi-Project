@@ -14,12 +14,12 @@ import seaborn as sns
 # Parameters for Deep Q Learning
 Branch_Size = 50
 Fold_Size = 10
-Learn_Rate = 0.001
-First_Epsilon_Value= 2.0
+Learn_Rate = 0.003
+First_Epsilon_Value= 2.5
 Epsilon_Min_Value= 0.1
-Epsilon_Mult_Factor = 0.95
+Epsilon_Mult_Factor = 0.70
 Batch_Size = 128
-Gamma = 0.99
+Gamma = 0.90
 
 df = pd.read_csv("../final_datasets/pixel_counts_with_cv_prediction_big_5.csv")
 df = df.drop(columns=["Image", "Ocp_Letter"])
