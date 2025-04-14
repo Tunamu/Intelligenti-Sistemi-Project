@@ -5,27 +5,27 @@ import torch.nn as nn
 import torch.optim as optim
 import random
 import matplotlib.pyplot as plt
+from matplotlib.pyplot import legend
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import StratifiedKFold
 import seaborn as sns
 
-# ====== Hyperparameters ======
-EPOCHS = 100
-BATCH_SIZE = 128
-GAMMA = 0.99
-EPSILON_START = 4.0
-EPSILON_END = 0.1
-EPSILON_DECAY = 0.65
-LR = 0.001
-N_SPLITS = 10
+# Parameters for Deep Q Learning
+Branch_Size = 50
+Fold_Size = 10
+Learn_Rate = 0.001
+First_Epsilon_Value= 2.0
+Epsilon_Min_Value= 0.1
+Epsilon_Mult_Factor = 0.95
+Batch_Size = 128
+Gamma = 0.99
 
-# ====== Data Preparation ======
-df = pd.read_csv("../final_datasets/pixel_counts_with_cv_prediction_little_5.csv")
+df = pd.read_csv("../final_datasets/pixel_counts_with_cv_prediction_big_5.csv")
 df = df.drop(columns=["Image", "Ocp_Letter"])
 
 le_letters = LabelEncoder()
-df["Expected_Letter"] = le_letters.fit_transform(df["Expected_Letter"])
+df["Expected_Letter"] = le_letters.fit_transform(df["Expected_Letter"]) # Converting Letters into numbers
 
 le_rf = LabelEncoder()
 df["CV_Prediction"] = le_rf.fit_transform(df["CV_Prediction"])
@@ -43,30 +43,29 @@ rf_out = torch.tensor(rf_out)
 
 n_classes = len(np.unique(y))
 
-# ====== DQN Model Definition ======
 class ImprovedDQN(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, feature_size, letter_size):
         super(ImprovedDQN, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_dim, 512),
+            nn.Linear(feature_size, 512), # Input estimates as 512 neurons
             nn.ReLU(),
             nn.Dropout(0.3),
             nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(256, output_dim)
+            nn.Linear(256, letter_size) # Output size same as letter size
         )
 
+    # How the system works when we give data
     def forward(self, x):
         return self.net(x)
 
-# ====== Cross-Validation Setup ======
-skf = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=42)
-fold_accuracies = []
-all_histories = []
-letter_accuracies_per_fold = []
+skf = StratifiedKFold(n_splits=Fold_Size, shuffle=True, random_state=42) # For testing same packets "random_state=42"
+fold_accuracies = [] # For holding accurate of every fold
+all_histories = []  # Training process values
+letter_accuracies_per_fold = [] # Letter Based Accuracies
 
 for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
-    print(f"\n==== Fold {fold+1} ====")
+    print(f"Fold {fold+1} testing...")
 
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
@@ -77,19 +76,19 @@ for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
     target_model.load_state_dict(model.state_dict())
     target_model.eval()
 
-    optimizer = optim.Adam(model.parameters(), lr=LR)
+    optimizer = optim.Adam(model.parameters(), lr=Learn_Rate)
     criterion = nn.MSELoss()
-    epsilon = EPSILON_START
+    epsilon = First_Epsilon_Value
 
-    history = {'epoch': [], 'loss': [], 'reward': [], 'epsilon': []}
+    history = {'Branch_Size': [], 'loss': [], 'reward': [], 'epsilon': []}
 
-    for epoch in range(EPOCHS):
+    for Branch_Size in range(Branch_Size):
         indices = torch.randperm(X_train.size(0))
         total_loss = 0
         total_reward = 0
 
-        for i in range(0, X_train.size(0), BATCH_SIZE):
-            batch_idx = indices[i:i+BATCH_SIZE]
+        for i in range(0, X_train.size(0), Batch_Size):
+            batch_idx = indices[i:i+Batch_Size]
             states = X_train[batch_idx]
             labels = y_train[batch_idx]
             rf_preds = rf_train[batch_idx]
@@ -110,7 +109,7 @@ for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
                 total_reward += reward
 
                 max_next_q = torch.max(next_q_values[j]).item()
-                targets[j, action] = reward + GAMMA * max_next_q
+                targets[j, action] = reward + Gamma * max_next_q
 
             loss = criterion(q_values, targets)
             optimizer.zero_grad()
@@ -118,21 +117,21 @@ for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
             optimizer.step()
             total_loss += loss.item()
 
-        if epoch % 5 == 0:
+        if Branch_Size % 5 == 0:
             target_model.load_state_dict(model.state_dict())
 
-        epsilon = max(EPSILON_END, epsilon * EPSILON_DECAY)
+        epsilon = max(Epsilon_Min_Value, epsilon * Epsilon_Mult_Factor)
 
-        print(f"Epoch {epoch+1}/{EPOCHS} - Loss: {total_loss:.4f} - Total Reward: {total_reward}")
+        # print(f"Branch_Size {Branch_Size+1}/{Branch_Size} - Loss: {total_loss:.4f} - Total Reward: {total_reward}")
 
-        history['epoch'].append(epoch + 1)
+        history['Branch_Size'].append(Branch_Size + 1)
         history['loss'].append(total_loss)
         history['reward'].append(total_reward)
         history['epsilon'].append(epsilon)
 
     all_histories.append(history)
 
-    # ====== Evaluation ======
+    # For using test dataset we create some arrays
     model.eval()
     preds = []
     true_labels = []
@@ -146,9 +145,8 @@ for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
 
     acc = accuracy_score(true_labels, preds)
     fold_accuracies.append(acc)
-    print(f"\nFold {fold+1} Accuracy: {acc:.4f}")
+    print(f"Fold {fold+1} Accuracy: %{acc*100:.2f}\n")
 
-    # ====== Letter-wise Accuracy ======
     letter_acc = {}
     true_labels_np = np.array(true_labels)
     preds_np = np.array(preds)
@@ -162,52 +160,53 @@ for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
 
     letter_accuracies_per_fold.append(letter_acc)
 
-    print("\nLetter-wise Accuracies:")
-    for letter, acc_l in sorted(letter_acc.items()):
-        print(f"{letter}: {acc_l:.4f}")
+    # print("\nLetter-wise Accuracies:")
+    # for letter, acc_l in sorted(letter_acc.items()):
+    #     print(f"{letter}: {acc_l:.4f}")
 
-# ====== Visualization ======
-plt.figure(figsize=(18, 5 * N_SPLITS))
+plt.figure(figsize=(18, 5 * Fold_Size))
 
 for i, hist in enumerate(all_histories):
-    plt.subplot(N_SPLITS, 3, i * 3 + 1)
-    plt.plot(hist['epoch'], hist['loss'], color='blue')
+    plt.subplot(Fold_Size, 3, i * 3 + 1)
+    plt.plot(hist['Branch_Size'], hist['loss'], color='blue')
     plt.title(f"Fold {i+1} - Loss")
     plt.grid(True)
 
-    plt.subplot(N_SPLITS, 3, i * 3 + 2)
-    plt.plot(hist['epoch'], hist['reward'], color='green')
+    plt.subplot(Fold_Size, 3, i * 3 + 2)
+    plt.plot(hist['Branch_Size'], hist['reward'], color='green')
     plt.title(f"Fold {i+1} - Reward")
     plt.grid(True)
 
-    plt.subplot(N_SPLITS, 3, i * 3 + 3)
-    plt.plot(hist['epoch'], hist['epsilon'], color='red')
+    plt.subplot(Fold_Size, 3, i * 3 + 3)
+    plt.plot(hist['Branch_Size'], hist['epsilon'], color='red')
     plt.title(f"Fold {i+1} - Epsilon")
     plt.grid(True)
 
 plt.tight_layout()
 plt.show()
 
-# ====== Fold Accuracy Summary ======
-print("\n==== Cross-Validation Summary ====")
-for i, acc in enumerate(fold_accuracies):
-    print(f"Fold {i+1}: {acc:.4f}")
-print(f"Average Accuracy: {np.mean(fold_accuracies):.4f}")
+print("\n=== Summary")
+# for i, acc in enumerate(fold_accuracies):
+#    print(f"Fold {i+1}: {acc:.4f}")
+print(f"Average Accuracy: %{np.mean(fold_accuracies)*100:.2f}")
+
+letter_df = pd.DataFrame(letter_accuracies_per_fold)
+avg_letter_acc = letter_df.mean().sort_index()
+
+print("\n==== Average Letter Accuracies")
+for letter, acc in avg_letter_acc.items():
+    print(f"{letter}: %{acc*100:.2f}")
 
 # Optional: Letter-wise accuracy summary across folds
-print("\n==== Letter-wise Accuracies Per Fold ====")
+'''print("\n==== Letter Accuracies Per Fold")
 for i, acc_dict in enumerate(letter_accuracies_per_fold):
     print(f"\nFold {i+1}")
     for letter, acc in sorted(acc_dict.items()):
         print(f"{letter}: {acc:.4f}")
-
-# ====== Harf Bazında Ortalama Doğruluk Grafiği ======
-# Fold'lardaki letter accuracy'leri dataframe'e çevir
-letter_df = pd.DataFrame(letter_accuracies_per_fold)
-avg_letter_acc = letter_df.mean().sort_values(ascending=False)
+'''
 
 plt.figure(figsize=(12, 6))
-sns.barplot(x=avg_letter_acc.index, y=avg_letter_acc.values, palette="viridis")
+sns.barplot(x=avg_letter_acc.index, y=avg_letter_acc.values, hue=avg_letter_acc.index, palette="viridis", legend=False)
 plt.title("Average Letter-wise Accuracy Over Folds")
 plt.xlabel("Letter")
 plt.ylabel("Average Accuracy")
@@ -222,6 +221,6 @@ plt.title("Letter-wise Accuracy per Fold")
 plt.xlabel("Fold")
 plt.ylabel("Letter")
 plt.yticks(rotation=0)
-plt.xticks(ticks=np.arange(N_SPLITS)+0.5, labels=[f"Fold {i+1}" for i in range(N_SPLITS)], rotation=45)
+plt.xticks(ticks=np.arange(Fold_Size)+0.5, labels=[f"Fold {i+1}" for i in range(Fold_Size)], rotation=45)
 plt.tight_layout()
 plt.show()
