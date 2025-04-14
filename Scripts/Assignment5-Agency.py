@@ -23,7 +23,8 @@ Epsilon_Mult_Factor = 0.70
 Batch_Size = 128
 Gamma = 0.70
 
-df = pd.read_csv("../final_datasets/pixel_counts_with_cv_prediction_little_5.csv")
+dataset_path = "../final_datasets/pixel_counts_with_cv_prediction_little_5.csv"
+df = pd.read_csv(dataset_path)
 df = df.drop(columns=["Image", "Ocp_Letter"])
 
 le_letters = LabelEncoder()
@@ -66,13 +67,14 @@ fold_accuracies = [] # For holding accurate of every fold
 all_histories = []  # Training process values
 letter_accuracies_per_fold = [] # Letter Based Accuracies
 
-with open("AgencyLog.txt", "a", encoding="utf-8") as f:
+log_path = "AgencyLog.txt"
+with open(log_path  , "a", encoding="utf-8") as f:
     f.write("=========================\n")
-    f.write("Path of working file: ../final_datasets/pixel_counts_with_cv_prediction_little_5.csv \n")
+    f.write(f"Path of working file: {dataset_path} \n")
     f.write(f"Date: {datetime.now()}\n\n")
 
 for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
-    with open("AgencyLog.txt", "a", encoding="utf-8") as f:
+    with open(log_path  , "a", encoding="utf-8") as f:
         f.write(f"Fold {fold+1} testing...\n")
     print(f"Fold {fold+1} testing...")
 
@@ -155,7 +157,7 @@ for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
     acc = accuracy_score(true_labels, preds)
     fold_accuracies.append(acc)
 
-    with open("AgencyLog.txt", "a", encoding="utf-8") as f:
+    with open(log_path  , "a", encoding="utf-8") as f:
         f.write(f"Fold {fold+1} Accuracy: %{acc*100:.2f}\n")
     print(f"Fold {fold+1} Accuracy: %{acc*100:.2f}\n")
 
@@ -172,7 +174,7 @@ for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
 
     letter_accuracies_per_fold.append(letter_acc)
 
-    with open("AgencyLog.txt", "a", encoding="utf-8") as f:
+    with open(log_path  , "a", encoding="utf-8") as f:
         f.write("Letter-wise Accuracies:\n")
         for letter, acc_l in sorted(letter_acc.items()):
             f.write(f"{letter}: {acc_l*100:.2f}\n")
@@ -199,7 +201,7 @@ for i, hist in enumerate(all_histories):
 plt.tight_layout()
 plt.show()
 
-with open("AgencyLog.txt", "a", encoding="utf-8") as f:
+with open(log_path  , "a", encoding="utf-8") as f:
     f.write("\n=== Summary\n")
     for i, acc in enumerate(fold_accuracies):
         f.write(f"Fold {i+1}: {acc*100:.2f}\n")
@@ -211,7 +213,7 @@ print(f"Average Accuracy: %{np.mean(fold_accuracies)*100:.2f}")
 letter_df = pd.DataFrame(letter_accuracies_per_fold)
 avg_letter_acc = letter_df.mean().sort_index()
 
-with open("AgencyLog.txt", "a", encoding="utf-8") as f:
+with open(log_path  , "a", encoding="utf-8") as f:
     '''f.write("==== Letter Accuracies Per Fold\n")
     for i, acc_dict in enumerate(letter_accuracies_per_fold):
         f.write(f"Fold {i + 1}\n")
