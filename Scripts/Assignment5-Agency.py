@@ -21,7 +21,7 @@ LR = 0.001
 N_SPLITS = 10
 
 # ====== Data Preparation ======
-df = pd.read_csv("../final_datasets/pixel_counts_with_cv_prediction_big_5.csv")
+df = pd.read_csv("../final_datasets/pixel_counts_with_cv_prediction_little_5.csv")
 df = df.drop(columns=["Image", "Ocp_Letter"])
 
 le_letters = LabelEncoder()
@@ -106,7 +106,7 @@ for fold, (train_index, test_index) in enumerate(skf.split(X, y)):
                 else:
                     action = torch.argmax(q_values[j]).item()
 
-                reward = 8 if action == labels[j].item() else (1 if action == rf_preds[j].item() else -5)
+                reward = 8 if action == labels[j].item() else (4 if action == rf_preds[j].item() else -5)
                 total_reward += reward
 
                 max_next_q = torch.max(next_q_values[j]).item()
